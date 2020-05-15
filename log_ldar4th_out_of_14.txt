@@ -1,0 +1,37 @@
+Current Time : 2020.05.12-15.44.30
+New FileName:  log.2020.05.12-15.44.30.txt
+Running.. SHITOMASI BRISK
+Running.. SHITOMASI BRIEF
+Running.. SHITOMASI ORB
+Running.. SHITOMASI FREAK
+Running.. SHITOMASI SIFT
+Running.. HARRIS BRISK
+Running.. HARRIS BRIEF
+Running.. HARRIS ORB
+Running.. HARRIS FREAK
+Running.. HARRIS SIFT
+Running.. FAST BRISK
+Running.. FAST BRIEF
+Running.. FAST ORB
+Running.. FAST FREAK
+Running.. FAST SIFT
+Running.. BRISK BRISK
+Running.. BRISK BRIEF
+Running.. BRISK ORB
+Running.. BRISK FREAK
+Running.. BRISK SIFT
+Running.. ORB BRISK
+Running.. ORB BRIEF
+Running.. ORB ORB
+Running.. ORB FREAK
+Running.. ORB SIFT
+Running.. SIFT BRISK
+Running.. SIFT BRIEF
+Running.. SIFT ORB
+terminate called after throwing an instance of 'cv::Exception'
+  what():  OpenCV(4.1.0) /opencv/modules/core/src/alloc.cpp:55: error: (-4:Insufficient memory) Failed to allocate 70168247552 bytes in function 'OutOfMemoryError'
+
+./runall.sh: line 14:  2236 Aborted                 (core dumped) ./3D_object_tracking $detector $descriptor >> ../$new_fileName
+Running.. SIFT FREAK
+Running.. SIFT SIFT
+Running.. AKAZE AKAZE
