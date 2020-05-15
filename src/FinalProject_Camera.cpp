@@ -73,6 +73,7 @@ int main(int argc, const char *argv[])
     int dataBufferSize = 2;       // no. of images which are held in memory (ring buffer) at the same time
     vector<DataFrame> dataBuffer; // list of data frames which are held in memory at the same time
     bool bVis = false;            // visualize results
+    bool tVis = true;             // visualize TopView combined with TTC results, save to file 
 
     /* MAIN LOOP OVER ALL IMAGES */
 
@@ -127,20 +128,20 @@ int main(int argc, const char *argv[])
         // associate Lidar points with camera-based ROI
         float shrinkFactor = 0.10; // shrinks each bounding box by the given percentage to avoid 3D object merging at the edges of an ROI
         clusterLidarWithROI((dataBuffer.end()-1)->boundingBoxes, (dataBuffer.end() - 1)->lidarPoints, shrinkFactor, P_rect_00, R_rect_00, RT);
-
+        
         // Visualize 3D objects
-        bVis = true;
+        bVis = false;
         if(bVis)
         {
-            show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(2000, 2000), true);
+          cv::Mat topviewImg(cv::Size(2000, 2000), CV_8UC3, cv::Scalar(255, 255, 255));
+          show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), topviewImg, true);
         }
         bVis = false;
-
+      
         cout << "#4 : CLUSTER LIDAR POINT CLOUD done" << endl;
-        
-        
+                               
         // REMOVE THIS LINE BEFORE PROCEEDING WITH THE FINAL PROJECT
-        continue; // skips directly to the next image without processing what comes beneath
+        //continue; // skips directly to the next image without processing what comes beneath
 
         /* DETECT IMAGE KEYPOINTS */
 
@@ -151,14 +152,22 @@ int main(int argc, const char *argv[])
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints; // create empty feature list for current image
         string detectorType = "SHITOMASI";
+        if(argc>1)
+        {
+            detectorType = argv[1];
+        }
 
         if (detectorType.compare("SHITOMASI") == 0)
         {
             detKeypointsShiTomasi(keypoints, imgGray, false);
         }
+        else if (detectorType.compare("HARRIS") == 0)
+        {
+            detKeypointsHarris(keypoints, imgGray, bVis);
+        }
         else
         {
-            //...
+            detKeypointsModern(keypoints, imgGray, detectorType, bVis);
         }
 
         // optional : limit number of keypoints (helpful for debugging and learning)
@@ -185,6 +194,10 @@ int main(int argc, const char *argv[])
 
         cv::Mat descriptors;
         string descriptorType = "BRISK"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
+        if(argc>2)
+        {
+            descriptorType = argv[2];
+        }
         descKeypoints((dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType);
 
         // push descriptors for current frame to end of data buffer
@@ -200,7 +213,7 @@ int main(int argc, const char *argv[])
 
             vector<cv::DMatch> matches;
             string matcherType = "MAT_BF";        // MAT_BF, MAT_FLANN
-            string descriptorType = "DES_BINARY"; // DES_BINARY, DES_HOG
+            //string descriptorType = "DES_BINARY"; // DES_BINARY, DES_HOG
             string selectorType = "SEL_NN";       // SEL_NN, SEL_KNN
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
@@ -210,7 +223,7 @@ int main(int argc, const char *argv[])
             // store matches in current data frame
             (dataBuffer.end() - 1)->kptMatches = matches;
 
-            cout << "#7 : MATCH KEYPOINT DESCRIPTORS done" << endl;
+            cout << "#7 : MATCH KEYPOINT DESCRIPTORS done " << matches.size() << " matches found" << endl;
 
             
             /* TRACK 3D OBJECT BOUNDING BOXES */
@@ -224,7 +237,7 @@ int main(int argc, const char *argv[])
             // store matches in current data frame
             (dataBuffer.end()-1)->bbMatches = bbBestMatches;
 
-            cout << "#8 : TRACK 3D OBJECT BOUNDING BOXES done" << endl;
+            cout << "#8 : TRACK 3D OBJECT BOUNDING BOXES done " << bbBestMatches.size() << " best matches" << endl;
 
 
             /* COMPUTE TTC ON OBJECT IN FRONT */
@@ -249,7 +262,7 @@ int main(int argc, const char *argv[])
                         prevBB = &(*it2);
                     }
                 }
-
+                //cout << "********************** LiDAR points current." << currBB->lidarPoints.size() << " @id " << currBB->boxID << " prev." << prevBB->lidarPoints.size() << " @id " << prevBB->boxID << endl;
                 // compute TTC for current match
                 if( currBB->lidarPoints.size()>0 && prevBB->lidarPoints.size()>0 ) // only compute TTC if we have Lidar points
                 {
@@ -265,10 +278,11 @@ int main(int argc, const char *argv[])
                     double ttcCamera;
                     clusterKptMatchesWithROI(*currBB, (dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->kptMatches);                    
                     computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
+                    
+                    cout << "#Frame=" << imgIndex << "," << detectorType << "," << descriptorType << " ,LidarTTC=" << ttcLidar << " ,CamTTC" << ttcCamera << " ,Visual=_" << imgNumber.str() << ".jpg" << endl;
                     //// EOF STUDENT ASSIGNMENT
-
-                    bVis = true;
-                    if (bVis)
+                    bVis = false;
+                    if (bVis || tVis)
                     {
                         cv::Mat visImg = (dataBuffer.end() - 1)->cameraImg.clone();
                         showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
@@ -278,11 +292,36 @@ int main(int argc, const char *argv[])
                         sprintf(str, "TTC Lidar : %f s, TTC Camera : %f s", ttcLidar, ttcCamera);
                         putText(visImg, str, cv::Point2f(80, 50), cv::FONT_HERSHEY_PLAIN, 2, cv::Scalar(0,0,255));
 
-                        string windowName = "Final Results : TTC";
-                        cv::namedWindow(windowName, 4);
-                        cv::imshow(windowName, visImg);
-                        cout << "Press key to continue to next frame" << endl;
-                        cv::waitKey(0);
+                        if (bVis)
+                        {
+                            string windowName = "Final Results : TTC";
+                            cv::namedWindow(windowName, 4);
+                            cv::imshow(windowName, visImg);
+                            cout << "Press key to continue to next frame" << endl;
+                            cv::waitKey(0);
+                        }
+                        
+                        // Visualize 3D objects
+                        cv::Mat topviewImg(cv::Size(visImg.size().height, visImg.size().height), CV_8UC3, cv::Scalar(255, 255, 255));
+                        show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), topviewImg, true);
+                        // display image
+                        if (bVis)
+                        {
+                            string windowName = "3D Objects Preview";
+                            cv::namedWindow(windowName, 1);
+                            cv::imshow(windowName, topviewImg);
+                            cv::waitKey(0);
+                        }
+                        if(tVis)
+                        {
+                            cv::Mat topviewImgOld(cv::Size(visImg.size().height, visImg.size().height), CV_8UC3, cv::Scalar(255, 255, 255));
+                            show3DObjects((dataBuffer.end()-2)->boundingBoxes, cv::Size(4.0, 20.0), topviewImgOld, true);
+
+                            cv::Mat combinedVis;
+                            cv::hconcat(std::vector<cv::Mat>{topviewImgOld, topviewImg, visImg}, combinedVis);
+                            
+                            cv::imwrite( "../results/" + detectorType + "_" + descriptorType + "_"  + imgNumber.str() + ".jpg", combinedVis );
+                        }
                     }
                     bVis = false;
 
